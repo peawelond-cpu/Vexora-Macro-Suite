@@ -24,6 +24,8 @@ global bombPlanted      := false
 global bombStartTick    := 0
 global lastLogSize      := 0
 global logFilePath      := ""
+global BombGui          := 0
+global BombLabel        := 0
 
 global bombPosX := 20
 global bombPosY := 0
@@ -184,6 +186,81 @@ LoadConfig() {
 ; ================================================================
 ;  AUTO BOMB DETECTION
 ; ================================================================
+StartBomb() {
+    global bombPlanted, bombStartTick, BombGui, BombLabel, bombPosX, bombPosY
+
+    if bombPlanted
+        return
+
+    bombPlanted := true
+    bombStartTick := A_TickCount
+
+    StopBombGui()
+
+    duration := Max(5, ParseInt(edBombDur.Value))
+    opacity := Max(50, Min(255, ParseInt(edBombOpacity.Value)))
+    color := Trim(edBombColor.Value)
+    if (color = "")
+        color := "FF6644"
+
+    BombGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000")
+    BombGui.BackColor := "0A0A12"
+    BombGui.SetFont("s18 c" . color . " Bold", "Segoe UI")
+    BombLabel := BombGui.Add("Text", "x12 y8 w236 h34 Center BackgroundTrans", "BOMB: " . duration . "s")
+    BombGui.SetFont("s8 c9CA3AF", "Segoe UI")
+    BombGui.Add("Text", "x12 y43 w236 h20 Center BackgroundTrans", "BOMB PLANTED")
+    BombGui.Show("x" . bombPosX . " y" . bombPosY . " w260 h70 NoActivate")
+    WinSetTransparent(opacity, BombGui)
+
+    SetTimer(UpdateBombTimer, 100)
+}
+
+UpdateBombTimer(*) {
+    global bombPlanted, bombStartTick, BombLabel
+    if !bombPlanted {
+        SetTimer(UpdateBombTimer, 0)
+        return
+    }
+
+    duration := Max(5, ParseInt(edBombDur.Value))
+    elapsed := (A_TickCount - bombStartTick) / 1000
+    remaining := duration - elapsed
+
+    if (remaining <= 0) {
+        StopBomb()
+        return
+    }
+
+    if BombLabel {
+        BombLabel.Value := "BOMB: " . Format("{:.1f}s", remaining)
+        if (remaining <= 5)
+            BombLabel.SetFont("s18 cEF4444 Bold")
+        else {
+            color := Trim(edBombColor.Value)
+            if (color = "")
+                color := "FF6644"
+            BombLabel.SetFont("s18 c" . color . " Bold")
+        }
+    }
+}
+
+StopBomb() {
+    global bombPlanted, bombStartTick
+    bombPlanted := false
+    bombStartTick := 0
+    SetTimer(UpdateBombTimer, 0)
+    StopBombGui()
+}
+
+StopBombGui() {
+    global BombGui, BombLabel
+    if BombGui {
+        try BombGui.Destroy()
+    }
+    BombGui := 0
+    BombLabel := 0
+}
+
 FindLogFile() {
     global logFilePath
     paths := [
