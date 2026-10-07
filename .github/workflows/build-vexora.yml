@@ -1,0 +1,68 @@
+name: Build Vexora.exe
+
+on:
+  push:
+    branches:
+      - vexora-v3-rewrite
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compile Vexora.exe
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify source file
+        shell: pwsh
+        run: |
+          if (-not (Test-Path './Vexora.ahk')) {
+            Write-Error 'Vexora.ahk was not found in the repository root.'
+            Get-ChildItem -Recurse -File | Select-Object FullName
+            exit 1
+          }
+
+      - name: Install AutoHotkey v2
+        shell: pwsh
+        run: |
+          $installer = "$env:TEMP\AutoHotkey.exe"
+          Invoke-WebRequest -Uri 'https://www.autohotkey.com/download/ahk-v2.exe' -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList '/S' -Wait
+          $compiler = @(
+            "$env:ProgramFiles\AutoHotkey\Compiler\Ahk2Exe.exe",
+            "$env:ProgramFiles\AutoHotkey\v2\Compiler\Ahk2Exe.exe",
+            "$env:ProgramFiles(x86)\AutoHotkey\Compiler\Ahk2Exe.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $compiler) {
+            Write-Error 'Ahk2Exe.exe was not found after installing AutoHotkey v2.'
+            exit 1
+          }
+          "AHK_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Compile Vexora.exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path './dist' | Out-Null
+          & "$env:AHK_COMPILER" /in './Vexora.ahk' /out './dist/Vexora.exe'
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Ahk2Exe failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+          }
+          if (-not (Test-Path './dist/Vexora.exe')) {
+            Write-Error 'Compilation finished but Vexora.exe was not created.'
+            exit 1
+          }
+          Get-Item './dist/Vexora.exe' | Select-Object Name, Length, LastWriteTime
+
+      - name: Upload Vexora.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vexora-Windows-x64
+          path: dist/Vexora.exe
+          if-no-files-found: error
+          retention-days: 14
