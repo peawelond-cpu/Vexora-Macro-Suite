@@ -18,7 +18,6 @@ global bhopLimit        := 50
 global pistolCPS        := 50
 global currentTheme     := "Dark"
 global currentSlot      := 2
-global BOMB_TIME        := 40
 global sniperVisible    := false
 
 global bombPlanted      := false
@@ -40,6 +39,8 @@ global snapTapD         := false
 
 ; ── Auto Strafe State ────────────────────────────────────────
 global autoStrafeEnabled := false
+global cameraTurnPixels := 3
+global currentWeapon := ""
 global strafeInAir       := false
 global strafeDir         := 1   ; 1 = right, -1 = left
 
@@ -113,15 +114,6 @@ SaveConfig() {
     IniWrite(edKeyPistol.Value,      f, "Keys", "Pistol")
     IniWrite(edKeyScope.Value,       f, "Keys", "Scope")
 
-    IniWrite(chkBombTimer.Value,     f, "Bomb", "Enabled")
-    IniWrite(chkBombAuto.Value,      f, "Bomb", "AutoMode")
-    IniWrite(edBombDur.Value,        f, "Bomb", "Duration")
-    IniWrite(edBombKey.Value,        f, "Bomb", "ManualKey")
-    IniWrite(edBombOpacity.Value,    f, "Bomb", "Opacity")
-    IniWrite(edBombColor.Value,      f, "Bomb", "Color")
-    IniWrite(bombPosX,               f, "Bomb", "PosX")
-    IniWrite(bombPosY,               f, "Bomb", "PosY")
-    IniWrite(chkBombLock.Value,      f, "Bomb", "Locked")
 
     IniWrite(chkKeyDisplay.Value,    f, "KeyDisplay", "Enabled")
     IniWrite(edKDOpacity.Value,      f, "KeyDisplay", "Opacity")
@@ -130,11 +122,6 @@ SaveConfig() {
     IniWrite(kdPosY,                 f, "KeyDisplay", "PosY")
     IniWrite(chkKDLock.Value,        f, "KeyDisplay", "Locked")
 
-    IniWrite(chkSniper.Value,        f, "Sniper", "Enabled")
-    IniWrite(edDotSize.Value,        f, "Sniper", "DotSize")
-    IniWrite(edDotColor.Value,       f, "Sniper", "DotColor")
-    IniWrite(edDotOpacity.Value,     f, "Sniper", "DotOpacity")
-    IniWrite(edDotOutline.Value,     f, "Sniper", "OutlineSize")
 
     IniWrite(chkSnapTap.Value,       f, "Movement", "SnapTap")
     IniWrite(chkAutoStrafe.Value,    f, "Movement", "AutoStrafe")
@@ -166,15 +153,6 @@ LoadConfig() {
     try edKeyPistol.Value := IniRead(f, "Keys", "Pistol", "LButton")
     try edKeyScope.Value  := IniRead(f, "Keys", "Scope", "e")
 
-    try chkBombTimer.Value  := IniRead(f, "Bomb", "Enabled", 1)
-    try chkBombAuto.Value   := IniRead(f, "Bomb", "AutoMode", 1)
-    try edBombDur.Value     := IniRead(f, "Bomb", "Duration", "40")
-    try edBombKey.Value     := IniRead(f, "Bomb", "ManualKey", "F5")
-    try edBombOpacity.Value := IniRead(f, "Bomb", "Opacity", "240")
-    try edBombColor.Value   := IniRead(f, "Bomb", "Color", "FF6644")
-    try bombPosX            := ParseInt(IniRead(f, "Bomb", "PosX", "20"))
-    try bombPosY            := ParseInt(IniRead(f, "Bomb", "PosY", A_ScreenHeight - 220))
-    try chkBombLock.Value   := IniRead(f, "Bomb", "Locked", 0)
 
     try chkKeyDisplay.Value := IniRead(f, "KeyDisplay", "Enabled", 0)
     try edKDOpacity.Value   := IniRead(f, "KeyDisplay", "Opacity", "230")
@@ -183,11 +161,6 @@ LoadConfig() {
     try kdPosY              := ParseInt(IniRead(f, "KeyDisplay", "PosY", A_ScreenHeight - 400))
     try chkKDLock.Value     := IniRead(f, "KeyDisplay", "Locked", 0)
 
-    try chkSniper.Value    := IniRead(f, "Sniper", "Enabled", 0)
-    try edDotSize.Value    := IniRead(f, "Sniper", "DotSize", "4")
-    try edDotColor.Value   := IniRead(f, "Sniper", "DotColor", "000000")
-    try edDotOpacity.Value := IniRead(f, "Sniper", "DotOpacity", "255")
-    try edDotOutline.Value := IniRead(f, "Sniper", "OutlineSize", "1")
 
     try chkSnapTap.Value    := IniRead(f, "Movement", "SnapTap", 1)
     try chkAutoStrafe.Value := IniRead(f, "Movement", "AutoStrafe", 0)
@@ -206,209 +179,6 @@ LoadConfig() {
     }
     if chkAOT.Value
         MyGui.Opt("+AlwaysOnTop")
-}
-
-; ================================================================
-;  BOMB TIMER OVERLAY
-; ================================================================
-global BombGui       := 0
-global bombTimeCtrl  := 0
-global bombBarCtrl   := 0
-global bombLabelCtrl := 0
-global bombC4Ctrl    := 0
-global bombSecCtrl   := 0
-
-CreateBombGui() {
-    global BombGui, bombTimeCtrl, bombBarCtrl, bombLabelCtrl, bombC4Ctrl, bombSecCtrl
-
-    userColor := Trim(edBombColor.Value)
-    if (userColor = "")
-        userColor := "FF6644"
-
-    BombGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000")
-    BombGui.BackColor := "0A0A0F"
-    BombGui.MarginX := 0
-    BombGui.MarginY := 0
-
-    BombGui.Add("Text", "x0 y0 w260 h3 Background" . userColor)
-    BombGui.Add("Text", "x0 y3 w260 h28 Background151520")
-
-    BombGui.SetFont("s14 cFFFFFF Bold", "Segoe UI Emoji")
-    bombC4Ctrl := BombGui.Add("Text", "x10 y5 w26 h24 Center BackgroundTrans", "💣")
-
-    BombGui.SetFont("s10 cFFFFFF Bold", "Segoe UI")
-    bombLabelCtrl := BombGui.Add("Text", "x40 y8 w150 h18 Left BackgroundTrans", "BOMB PLANTED")
-
-    BombGui.SetFont("s8 c" . userColor . " Bold", "Consolas")
-    BombGui.Add("Text", "x200 y8 w50 h18 Right BackgroundTrans", "◉ LIVE")
-
-    BombGui.Add("Text", "x0 y31 w260 h60 Background0A0A0F")
-
-    BombGui.SetFont("s36 cFFFFFF Bold", "Consolas")
-    bombTimeCtrl := BombGui.Add("Text", "x10 y33 w170 h55 Left BackgroundTrans", "40.0")
-
-    BombGui.SetFont("s11 c888888 Bold", "Consolas")
-    bombSecCtrl := BombGui.Add("Text", "x180 y58 w70 h20 Left BackgroundTrans", "SEC")
-
-    BombGui.Add("Text", "x0 y91 w260 h4 Background1A1A25")
-    bombBarCtrl := BombGui.Add("Progress",
-        "x0 y91 w260 h4 c" . userColor . " Background1A1A25 -Smooth Range0-1000", 1000)
-
-    BombGui.Add("Text", "x0 y95 w260 h20 Background0F0F16")
-    BombGui.SetFont("s7 c666677", "Consolas")
-    BombGui.Add("Text", "x10 y98 w130 h14 Left BackgroundTrans", "⏱ C4 COUNTDOWN")
-    BombGui.Add("Text", "x140 y98 w110 h14 Right BackgroundTrans", "VEXORA v2.6")
-
-    bombC4Ctrl.OnEvent("Click", BombDrag)
-    bombTimeCtrl.OnEvent("Click", BombDrag)
-    bombLabelCtrl.OnEvent("Click", BombDrag)
-    bombSecCtrl.OnEvent("Click", BombDrag)
-
-    BombGui.OnEvent("ContextMenu", HideBombTimerCtx)
-}
-
-BombDrag(*) {
-    if !chkBombLock.Value
-        PostMessage(0xA1, 2, 0, , "ahk_id " . BombGui.Hwnd)
-}
-
-HideBombTimerCtx(*) {
-    HideBombTimer()
-}
-
-ShowBombTimer() {
-    global BombGui, bombPosX, bombPosY
-    if !chkBombTimer.Value
-        return
-    if !BombGui
-        CreateBombGui()
-
-    opacity := ParseInt(edBombOpacity.Value)
-    opacity := Max(50, Min(255, opacity))
-
-    userColor := Trim(edBombColor.Value)
-    if (userColor = "")
-        userColor := "FF6644"
-
-    try bombBarCtrl.Opt("+c" . userColor)
-    bombBarCtrl.Value := 1000
-    bombTimeCtrl.Value := Format("{:.1f}", BOMB_TIME)
-    bombTimeCtrl.SetFont("s36 cFFFFFF Bold")
-    bombLabelCtrl.Value := "BOMB PLANTED"
-    bombLabelCtrl.SetFont("s10 cFFFFFF Bold")
-    bombSecCtrl.SetFont("s11 c888888 Bold")
-
-    posX := bombPosX
-    posY := bombPosY
-    if (posY = 0)
-        posY := A_ScreenHeight - 220
-
-    WinSetTransparent(opacity, BombGui)
-    BombGui.Show("x" . posX . " y" . posY . " w260 h115 NoActivate")
-    SetTimer(TrackBombPos, 500)
-}
-
-HideBombTimer() {
-    global BombGui
-    SetTimer(TrackBombPos, 0)
-    if BombGui
-        BombGui.Hide()
-}
-
-TrackBombPos(*) {
-    global BombGui, bombPosX, bombPosY
-    if !BombGui || !BombGui.Hwnd
-        return
-    try {
-        BombGui.GetPos(&x, &y)
-        if (x != bombPosX || y != bombPosY) {
-            bombPosX := x
-            bombPosY := y
-            try edBombX.Value := x
-            try edBombY.Value := y
-            IniWrite(x, CONFIG_FILE, "Bomb", "PosX")
-            IniWrite(y, CONFIG_FILE, "Bomb", "PosY")
-        }
-    }
-}
-
-UpdateBombTimer(*) {
-    global bombPlanted, bombStartTick, BOMB_TIME
-    if !bombPlanted {
-        SetTimer(UpdateBombTimer, 0)
-        HideBombTimer()
-        return
-    }
-
-    elapsed   := (A_TickCount - bombStartTick) / 1000
-    remaining := BOMB_TIME - elapsed
-
-    if (remaining <= 0) {
-        bombPlanted := false
-        SetTimer(UpdateBombTimer, 0)
-        bombTimeCtrl.Value := "0.0"
-        bombTimeCtrl.SetFont("s36 cFF3333 Bold")
-        bombLabelCtrl.Value := "💥 DETONATED"
-        bombLabelCtrl.SetFont("s10 cFF3333 Bold")
-        bombBarCtrl.Value := 0
-        SetTimer(HideBombTimer, -2500)
-        return
-    }
-
-    pct := Round((remaining / BOMB_TIME) * 1000)
-    bombBarCtrl.Value := pct
-    bombTimeCtrl.Value := Format("{:.1f}", remaining)
-
-    if (remaining <= 5) {
-        bombTimeCtrl.SetFont("s36 cFF3333 Bold")
-        try bombBarCtrl.Opt("+cFF3333")
-        bombLabelCtrl.Value := "⚠ DETONATING"
-        bombLabelCtrl.SetFont("s10 cFF3333 Bold")
-        bombSecCtrl.SetFont("s11 cFF6666 Bold")
-    } else if (remaining <= 15) {
-        bombTimeCtrl.SetFont("s36 cFFB844 Bold")
-        try bombBarCtrl.Opt("+cFFB844")
-        bombLabelCtrl.Value := "⏰ HURRY UP"
-        bombLabelCtrl.SetFont("s10 cFFB844 Bold")
-        bombSecCtrl.SetFont("s11 cFFAA55 Bold")
-    } else {
-        bombTimeCtrl.SetFont("s36 cFFFFFF Bold")
-        userColor := Trim(edBombColor.Value)
-        if (userColor = "")
-            userColor := "FF6644"
-        try bombBarCtrl.Opt("+c" . userColor)
-        bombLabelCtrl.Value := "💣 BOMB PLANTED"
-        bombLabelCtrl.SetFont("s10 cFFFFFF Bold")
-        bombSecCtrl.SetFont("s11 c888888 Bold")
-    }
-}
-
-StartBomb(*) {
-    global bombPlanted, bombStartTick, BOMB_TIME
-    BOMB_TIME := ParseInt(edBombDur.Value)
-    if (BOMB_TIME < 5)
-        BOMB_TIME := 40
-    bombPlanted   := true
-    bombStartTick := A_TickCount
-    ShowBombTimer()
-    SetTimer(UpdateBombTimer, 50)
-}
-
-StopBomb(*) {
-    global bombPlanted
-    bombPlanted := false
-    SetTimer(UpdateBombTimer, 0)
-    HideBombTimer()
-}
-
-ManualBombToggle(*) {
-    global bombPlanted
-    if !CS2Active()
-        return
-    if bombPlanted
-        StopBomb()
-    else
-        StartBomb()
 }
 
 ; ================================================================
@@ -1680,13 +1450,13 @@ F8:: {
 }
 
 ; ================================================================
-;  AUTO STRAFE
+;  AUTO STRAFE — SPACE + A/D + CAMERA
 ; ================================================================
 ToggleAutoStrafe(*) {
     global autoStrafeEnabled
     autoStrafeEnabled := chkAutoStrafe.Value
     if autoStrafeEnabled
-        SetTimer(AutoStrafeTick, ParseInt(edStrafeRate.Value))
+        SetTimer(AutoStrafeTick, Max(5, ParseInt(edStrafeRate.Value)))
     else {
         SetTimer(AutoStrafeTick, 0)
         Send "{a up}{d up}"
@@ -1694,31 +1464,44 @@ ToggleAutoStrafe(*) {
 }
 
 AutoStrafeTick(*) {
-    global strafeDir, autoStrafeEnabled
-    if !autoStrafeEnabled || !CS2Active() {
-        SetTimer(AutoStrafeTick, 0)
+    global autoStrafeEnabled, strafeDir
+    if !autoStrafeEnabled || !CS2Active() || !GetKeyState("Space", "P") {
         Send "{a up}{d up}"
         return
     }
-    ; Only strafe if space held (in air / bunnyhopping)
-    if !GetKeyState("Space", "P")
-        return
-    rate := ParseInt(edStrafeRate.Value)
-    if (rate < 5)
-        rate := 25
+    rate := Max(5, ParseInt(edStrafeRate.Value))
     SetTimer(AutoStrafeTick, rate)
-    if (strafeDir = 1) {
+    px := Max(0, Min(20, ParseInt(edCameraPx.Value)))
+    left := GetKeyState("a", "P")
+    right := GetKeyState("d", "P")
+    if left && !right {
+        Send "{d up}{a down}"
+        if px
+            MouseMove(-px, 0, 0, "R")
+        return
+    }
+    if right && !left {
         Send "{a up}{d down}"
+        if px
+            MouseMove(px, 0, 0, "R")
+        return
+    }
+    if strafeDir = 1 {
+        Send "{a up}{d down}"
+        if px
+            MouseMove(px, 0, 0, "R")
         strafeDir := -1
     } else {
         Send "{d up}{a down}"
+        if px
+            MouseMove(-px, 0, 0, "R")
         strafeDir := 1
     }
 }
 
 ; ================================================================
 ;  CLEANUP
-; ================================================================
+========================================================
 ExitCleanup(*) {
     SaveConfig()
     SetTimer(AutoStrafeTick, 0)
